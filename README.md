@@ -41,12 +41,14 @@
 
 ## 下载
 
-前往 **[Releases](https://github.com/cylDemo/Ding_pan/releases)** 页面下载最新版本：
+前往 **[Releases](https://github.com/cylDemo/Ding_pan/releases/latest)** 页面下载最新版本：
 
 | 版本 | 文件 | 启动速度 | 说明 |
 |---|---|---|---|
-| **绿色版（推荐）** | `盯盘-绿色版.zip` | 约 1~2 秒 | 解压得到一个「盯盘」文件夹，内含 `盯盘.exe` 与 `_internal` 子目录 |
-| 单文件版 | `盯盘-发布包.zip` | 约 3~5 秒 | 解压只有一个 `盯盘.exe`，每次启动需先自解压到临时目录，属正常现象 |
+| **绿色版（推荐）** | [`DingPan-v2.0.1-win64-portable.zip`](https://github.com/cylDemo/Ding_pan/releases/download/v2.0.1/DingPan-v2.0.1-win64-portable.zip) | 约 1~2 秒 | 解压得到一个「盯盘」文件夹，内含 `盯盘.exe` 与 `_internal` 子目录 |
+| 单文件版 | [`DingPan-v2.0.1-win64-singlefile.zip`](https://github.com/cylDemo/Ding_pan/releases/download/v2.0.1/DingPan-v2.0.1-win64-singlefile.zip) | 约 3~5 秒 | 解压只有一个 `盯盘.exe`，每次启动需先自解压到临时目录，属正常现象 |
+
+> 💡 压缩包文件名使用英文，是为了兼容 GitHub 的下载机制（平台会剥离非 ASCII 文件名）。**解压后包内是中文的「盯盘」文件夹，使用不受影响。**
 
 > ⚠️ **绿色版请勿拆开使用**：`盯盘.exe` 与 `_internal` 目录是一体的，不要只把 exe 单独拷出来，也不要分开移动。
 
