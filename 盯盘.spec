@@ -54,6 +54,10 @@ a = Analysis(
     # P1-A：闭包改为经 hiddenimports 收进 PYZ，不再以明文 .py 随包分发
     datas=[],
     hiddenimports=['query_price_jhub',   # P1-A：运行期动态 import，必须显式声明
+                   # Tier 0.2 拆出的三个纯逻辑模块。gold_widget 已静态 import 它们，
+                   # 静态分析本可自动收集；显式声明是为让依赖闭包**可审计**，
+                   # 且不受后续 excludes/optimize 调整影响（漏收会在运行期 ImportError）。
+                   'gold_theme', 'gold_config', 'gold_util',
                    'secrets', 'base64', 'hashlib', 'socket', 'webbrowser', 'signal',
                    'http.server', 'subprocess', 'datetime', 'typing', 'argparse'],
     hookspath=[],

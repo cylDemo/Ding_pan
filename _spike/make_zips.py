@@ -9,8 +9,11 @@ import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GREEN_SRC = os.path.join(ROOT, "dist_v201", "盯盘")
-ONEFILE_SRC = os.path.join(ROOT, "dist_of_v201", "盯盘.exe")
+# 构建产物路径（与两个 spec 的 --distpath 一致）：
+#   onedir  -> dist_onedir\盯盘\…
+#   onefile -> 仓库根目录 盯盘.exe（spec 用 --distpath .）
+GREEN_SRC = os.path.join(ROOT, "dist_onedir", "盯盘")
+ONEFILE_SRC = os.path.join(ROOT, "盯盘.exe")
 GREEN_OUT = os.path.join(ROOT, "盯盘-绿色版.zip")
 ONEFILE_OUT = os.path.join(ROOT, "盯盘-发布包.zip")
 

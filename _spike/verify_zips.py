@@ -36,7 +36,7 @@ def main():
     fails = []
 
     # ---- 绿色版 ----
-    src_exe = os.path.join(ROOT, "dist_v201", "盯盘", "盯盘.exe")
+    src_exe = os.path.join(ROOT, "dist_onedir", "盯盘", "盯盘.exe")
     with zipfile.ZipFile(GREEN) as z:
         names = z.namelist()
         exe_members = [n for n in names if n.endswith("/盯盘.exe")]
@@ -70,7 +70,7 @@ def main():
             shutil.rmtree(tmp, ignore_errors=True)
 
     # ---- 发布包 ----
-    src_of = os.path.join(ROOT, "dist_of_v201", "盯盘.exe")
+    src_of = os.path.join(ROOT, "盯盘.exe")
     with zipfile.ZipFile(ONEFILE) as z:
         names = z.namelist()
         print("[发布包] 条目=%d 内容=%s" % (len(names), names))
@@ -85,13 +85,19 @@ def main():
         if not any(n.endswith(DOC_INNER) for n in names):
             fails.append("发布包缺说明文档")
 
-    # ---- 根目录 exe 应等于 onefile 构建产物 ----
+    # ---- 构建新鲜度：exe 必须不比源码旧（防"改了代码没重建就打包"）----
     root_exe = os.path.join(ROOT, "盯盘.exe")
     if os.path.isfile(root_exe):
-        same = sha_file(root_exe) == sha_file(src_of)
-        print("[根目录] 盯盘.exe 与 onefile 构建源一致=%s (%d bytes)" % (same, os.path.getsize(root_exe)))
-        if not same:
-            fails.append("根目录 盯盘.exe 不是最新版（与 v2.0.1 构建产物不一致）")
+        srcs = [f for f in os.listdir(ROOT) if f.endswith(".py") and f.startswith("gold")]
+        srcs += ["盯盘.spec", "version_info.txt"]
+        newest = max((os.path.getmtime(os.path.join(ROOT, f))
+                      for f in srcs if os.path.isfile(os.path.join(ROOT, f))), default=0)
+        exe_mt = os.path.getmtime(root_exe)
+        fresh = exe_mt >= newest
+        print("[新鲜度] 盯盘.exe mtime=%s  最新源 mtime=%s  未陈旧=%s  (%d bytes)"
+              % (int(exe_mt), int(newest), fresh, os.path.getsize(root_exe)))
+        if not fresh:
+            fails.append("盯盘.exe 比源码旧，需重新构建后再打包")
 
     print()
     if fails:
