@@ -59,7 +59,7 @@ except Exception:
     pass
 
 APP_NAME = "盯盘"
-__version__ = "2.0.1"          # 与 version_info.txt 保持同步；用于排障时确认用户手上的版本
+__version__ = "2.0.2"          # 与 version_info.txt 保持同步；用于排障时确认用户手上的版本
 CONF_PATH = os.path.join(os.path.expanduser("~"), ".gold_widget.json")
 
 # 刷新间隔：命令行 --interval 可覆盖。实测京东公开接口 5s 级连续调用零失败、
@@ -1256,39 +1256,61 @@ class Widget:
                 tk.Frame(m, bg=THEME.line, height=1).pack(fill="x", padx=10, pady=(3, 2))
                 continue
             if item[0] == "alpha":
-                # 透明度行：点击展开/收起百分比子选项（内嵌展开，不另开浮层，
-                # 规避第二个 topmost 浮层的 z-order/定位坑）
-                arrow = "▾" if alpha_expanded else "▸"
-                a = tk.Label(m, text=f"透明度 {cur_alpha:.0%}  {arrow}",
-                             fg=THEME.fg, bg=THEME.bg, font=F_SMALL,
-                             anchor="w", padx=14, pady=3, cursor="hand2")
-                a.pack(fill="x")
-                a.bind("<Button-1>", lambda ev, ex=not alpha_expanded: (
-                    self._close_menu(),
-                    self._popup_menu(ev, alpha_expanded=ex, at=getattr(self, "_menu_xy", None))))
-                a.bind("<Enter>", lambda ev, l=a: l.config(bg=THEME.hover))
-                a.bind("<Leave>", lambda ev, l=a: l.config(bg=THEME.bg))
-                if alpha_expanded:
-                    for v in self._ALPHA_LEVELS:
-                        pct = round(v * 100)
-                        mark = "✓ " if abs(cur_alpha - v) < 0.005 else "   "
-                        p = tk.Label(m, text=f"{mark}{pct}%",
-                                     fg=THEME.fg2 if abs(cur_alpha - v) >= 0.005 else THEME.fg,
-                                     bg=THEME.bg, font=F_SMALL,
-                                     anchor="w", padx=30, pady=3, cursor="hand2")
-                        p.pack(fill="x")
-                        p.bind("<Button-1>", lambda ev, vv=v: (self._set_alpha(vv), self._close_menu()))
-                        p.bind("<Enter>", lambda ev, l=p: l.config(bg=THEME.hover))
-                        p.bind("<Leave>", lambda ev, l=p: l.config(bg=THEME.bg))
+                self._menu_alpha_row(m, cur_alpha, alpha_expanded)
                 continue
-            text, cmd = item
-            lbl = tk.Label(m, text=text, fg=THEME.fg, bg=THEME.bg,
-                           font=F_SMALL, anchor="w", padx=14, pady=3, cursor="hand2")
-            lbl.pack(fill="x")
-            lbl.bind("<Button-1>", lambda ev, c=cmd: (self._close_menu(), c()))
-            lbl.bind("<Enter>", lambda ev, l=lbl: l.config(bg=THEME.hover))
-            lbl.bind("<Leave>", lambda ev, l=lbl: l.config(bg=THEME.bg))
+            self._menu_item(m, item[0], item[1])
 
+        self._menu_place(m, e, at)
+        # 刻意不调用 focus_force：不抢焦点就没有 FocusOut 自发关闭的链条。
+        # 关闭依赖 __init__ 里一次性注册的全局清扫（点击菜单外 / Esc）。
+
+    def _menu_item(self, m, text, cmd):
+        """菜单普通项：贴左文字 + hover 高亮 + 点击先关菜单再执行命令。
+
+        ``m`` 为菜单 Toplevel（形参名与题块内变量一致，勿改名）。
+        """
+        lbl = tk.Label(m, text=text, fg=THEME.fg, bg=THEME.bg,
+                       font=F_SMALL, anchor="w", padx=14, pady=3, cursor="hand2")
+        lbl.pack(fill="x")
+        lbl.bind("<Button-1>", lambda ev, c=cmd: (self._close_menu(), c()))
+        lbl.bind("<Enter>", lambda ev, l=lbl: l.config(bg=THEME.hover))
+        lbl.bind("<Leave>", lambda ev, l=lbl: l.config(bg=THEME.bg))
+
+    def _menu_alpha_row(self, m, cur_alpha, alpha_expanded):
+        """透明度行：主行点击展开/收起百分比子选项（内嵌展开、不另开浮层，
+        规避第二个 topmost 浮层的 z-order/定位坑）。
+
+        子选项点击即设值并关菜单；当前值以 ✓ 标记。``continue`` 由调用方负责。
+        """
+        arrow = "▾" if alpha_expanded else "▸"
+        a = tk.Label(m, text=f"透明度 {cur_alpha:.0%}  {arrow}",
+                     fg=THEME.fg, bg=THEME.bg, font=F_SMALL,
+                     anchor="w", padx=14, pady=3, cursor="hand2")
+        a.pack(fill="x")
+        a.bind("<Button-1>", lambda ev, ex=not alpha_expanded: (
+            self._close_menu(),
+            self._popup_menu(ev, alpha_expanded=ex, at=getattr(self, "_menu_xy", None))))
+        a.bind("<Enter>", lambda ev, l=a: l.config(bg=THEME.hover))
+        a.bind("<Leave>", lambda ev, l=a: l.config(bg=THEME.bg))
+        if alpha_expanded:
+            for v in self._ALPHA_LEVELS:
+                pct = round(v * 100)
+                mark = "✓ " if abs(cur_alpha - v) < 0.005 else "   "
+                p = tk.Label(m, text=f"{mark}{pct}%",
+                             fg=THEME.fg2 if abs(cur_alpha - v) >= 0.005 else THEME.fg,
+                             bg=THEME.bg, font=F_SMALL,
+                             anchor="w", padx=30, pady=3, cursor="hand2")
+                p.pack(fill="x")
+                p.bind("<Button-1>", lambda ev, vv=v: (self._set_alpha(vv), self._close_menu()))
+                p.bind("<Enter>", lambda ev, l=p: l.config(bg=THEME.hover))
+                p.bind("<Leave>", lambda ev, l=p: l.config(bg=THEME.bg))
+
+    def _menu_place(self, m, e, at):
+        """把菜单映射到正确坐标（光标处 / 重开时沿用原坐标）并压制首帧闪现。
+
+        withdraw → geometry → deiconify 的顺序是关键：严禁在默认位置 (0,0) 映射
+        一帧再挪走，那正是"屏幕左上角快速闪出菜单"的来源。
+        """
         # 定位：光标处（重开时沿用原坐标），整体夹在屏幕内
         m.update_idletasks()
         w_, h_ = m.winfo_reqwidth(), m.winfo_reqheight()
@@ -1311,8 +1333,6 @@ class Widget:
         # 最终 raise：不重设坐标，只保证菜单压在浮窗之上
         m.after(250, lambda: self._raise_menu(m))
         m.lift()
-        # 刻意不调用 focus_force：不抢焦点就没有 FocusOut 自发关闭的链条。
-        # 关闭依赖 __init__ 里一次性注册的全局清扫（点击菜单外 / Esc）。
 
     def _reposition_menu(self, w, x, y, tries=0):
         """映射后二次压实菜单位置（等 viewable 后 geometry+lift）；菜单已关闭则跳过。"""
@@ -1614,15 +1634,7 @@ class Widget:
         try: self.search_box.pack_forget()
         except Exception: pass
 
-        # ── 彻底清掉 stocks_box 里的旧 grid 内容 ──
-        # 必须在 `if not codes: return` 之前执行：删掉最后一只股票后 watchlist 为空，
-        # 若先 return，旧股票行/列标题会残留在界面上 → 表现为“点🗑没反应”。
-        # （旧代码先 return 后清理，且 row[1] 恒为 None 的 destroy 循环永远 no-op）
-        for child in list(self.stocks_box.pack_slaves()):
-            child.pack_forget()
-        for child in list(self.stocks_box.grid_slaves()):
-            child.destroy()
-        self.stock_rows = []
+        self._clear_stock_rows()
         # 表头显隐必须赶在空列表 early return 之前：删光自选股时表头也要跟着隐藏
         self._show_stocks_header(bool(codes))
 
@@ -1645,73 +1657,96 @@ class Widget:
         # 每只股票占 2 行（base_row 和 base_row+1）：name/code 上下两行，
         # price/pct/amt/del 用 rowspan=2 占两行。
         for idx, code in enumerate(codes[:STOCKS_MAX]):
-            base_row = idx * 2
-            d = self.stock_data.get(code, {})
-            # 超长名称截断加 …（列宽固定，防长名把列撑宽挤出删除按钮）
-            name = self._mask(fit_name(d.get("name") or code))
-            price = d.get("price")
-            pct = d.get("change_pct")
-            amount = d.get("amount_yi")
-            pct_col = THEME.up if (pct or 0) > 0 else (THEME.down if (pct or 0) < 0 else THEME.fg3)
-            price_col = pct_col if price is not None else THEME.fg
-
-            # col 0: 股票名（base_row）+ 代码（base_row+1）
-            name_l = tk.Label(self.stocks_box, text=name, fg=THEME.fg, bg=THEME.bg,
-                              font=F_STOCK_NAME, anchor="w")
-            name_l.grid(row=base_row, column=0, sticky="nswe", padx=0, pady=(4, 0))
-            code_l = tk.Label(self.stocks_box, text=self._mask(code), fg=THEME.fg3, bg=THEME.bg,
-                              font=("Microsoft YaHei UI", 8), anchor="w")
-            code_l.grid(row=base_row + 1, column=0, sticky="nswe", padx=0, pady=(0, 4))
-            # col 1: 价格（rowspan=2 跨两行，与股票名同行水平对齐）
-            price_l = tk.Label(self.stocks_box,
-                               text=self._mask(f"{price:.2f}") if price is not None else "—",
-                               fg=price_col, bg=THEME.bg, font=F_STOCK_PRC, anchor="w")
-            price_l.grid(row=base_row, column=1, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            # col 2: 涨跌幅（rowspan=2）
-            pct_text = self._mask(f"{sign(pct)}{pct:.2f}%") if pct is not None else "—"
-            pct_l = tk.Label(self.stocks_box, text=pct_text, fg=pct_col, bg=THEME.bg,
-                             font=F_STOCK_PCT, anchor="w")
-            pct_l.grid(row=base_row, column=2, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            # col 3: 换手率（rowspan=2，中性数据用 fg2）
-            tr = d.get("turnover")
-            tr_text = self._mask(f"{tr:.2f}%") if tr is not None else "—"
-            tr_l = tk.Label(self.stocks_box, text=tr_text, fg=THEME.fg2, bg=THEME.bg,
-                            font=F_STOCK_AMT, anchor="w")
-            tr_l.grid(row=base_row, column=3, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            # col 4: 成交额 Canvas（rowspan=2，文字贴 cell 左 x=3，与其他列对齐方式统一）
-            amt_text = self._mask(f"{amount:.2f}亿") if amount is not None else "—"
-            amt_l = tk.Canvas(self.stocks_box, bg=THEME.bg, width=10, height=44,
-                              highlightthickness=0, bd=0)
-            amt_l.grid(row=base_row, column=4, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            amt_text_id = amt_l.create_text(0, 0, text=amt_text,
-                                            font=F_STOCK_AMT, fill=THEME.fg2, anchor="w")
-            def _draw_amt(_evt=None, c=amt_l, tid=amt_text_id, txt=amt_text, fg=THEME.fg2):
-                h_ = c.winfo_height()
-                if c.winfo_width() < 4:
-                    return
-                c.coords(tid, 3, h_ / 2)
-                c.itemconfig(tid, text=txt, fill=fg)
-            amt_l.bind("<Configure>", _draw_amt)
-            # col 5: 🗑 删除（rowspan=2，跨两行垂直居中；padx/pady 清零压掉
-            # 隐式内边距，避免 reqwidth 超过列 minsize 撑宽末列）
-            del_btn = tk.Label(self.stocks_box, text="🗑", fg=THEME.fg3, bg=THEME.bg,
-                               font=("Segoe UI Emoji", 10), cursor="hand2",
-                               padx=0, pady=0, borderwidth=0, highlightthickness=0)
-            del_btn.grid(row=base_row, column=5, rowspan=2, sticky="nse", padx=(2, 0), pady=(4, 4))
-            # 只绑按下（Button-1）：若再绑 ButtonRelease-1，一次点击会触发两次删除——
-            # 滚动状态下按下滑删掉最后一只后列表重建、滚动复位，松开时 Release 会落进
-            # 复位后同一屏幕位置的另一只股票的 🗑，造成连带删除。
-            del_btn.bind("<Button-1>", lambda e, c=code: self._remove_stock(c))
-            del_btn.bind("<Enter>", lambda e, b=del_btn: b.config(fg=THEME.up))
-            del_btn.bind("<Leave>", lambda e, b=del_btn: b.config(fg=THEME.fg3))
-
-            # stock_rows tuple: (code, frame=None, name_l, price_l, pct_l, amt_l, del_btn, code_l, amt_tid, _draw_amt, amt_text)
-            # frame=None 因为所有 widget 都在 self.stocks_box，destroy 时按 widget 自身处理
-            self.stock_rows.append((code, None, name_l, price_l, pct_l, amt_l, del_btn, code_l,
-                                    amt_text_id, _draw_amt, amt_text))
+            self._build_stock_row(idx, code, self.stock_data.get(code, {}))
 
         # 行高实测 + 可视高度/窗口尺寸联动（≤3 只实高展示，>3 只锁定 3 行 + 滚动）
         self.root.after_idle(self._layout_stocks)
+
+    def _clear_stock_rows(self):
+        """清空 stocks_box 里的旧行（pack 残留与 grid 残留都要清）。
+
+        必须在 ``if not codes: return`` 之前调用：删掉最后一只股票后 watchlist
+        为空，若先 return，旧股票行/列标题会残留在界面上 → 表现为"点🗑没反应"。
+        """
+        # ── 彻底清掉 stocks_box 里的旧 grid 内容 ──
+        # 必须在 `if not codes: return` 之前执行：删掉最后一只股票后 watchlist 为空，
+        # 若先 return，旧股票行/列标题会残留在界面上 → 表现为“点🗑没反应”。
+        # （旧代码先 return 后清理，且 row[1] 恒为 None 的 destroy 循环永远 no-op）
+        for child in list(self.stocks_box.pack_slaves()):
+            child.pack_forget()
+        for child in list(self.stocks_box.grid_slaves()):
+            child.destroy()
+        self.stock_rows = []
+
+    def _build_stock_row(self, idx, code, d):
+        """构建单只股票的双行单元格（列布局说明见 _render_stocks 的 docstring）。
+
+        调用方传入该股行情 dict ``d``（缺失即空 dict）；本方法只做绘制与删除按钮
+        绑定，并把结果追加到 ``self.stock_rows`` 供 _layout_stocks 实测高度。
+        """
+        base_row = idx * 2
+        # 超长名称截断加 …（列宽固定，防长名把列撑宽挤出删除按钮）
+        name = self._mask(fit_name(d.get("name") or code))
+        price = d.get("price")
+        pct = d.get("change_pct")
+        amount = d.get("amount_yi")
+        pct_col = THEME.up if (pct or 0) > 0 else (THEME.down if (pct or 0) < 0 else THEME.fg3)
+        price_col = pct_col if price is not None else THEME.fg
+
+        # col 0: 股票名（base_row）+ 代码（base_row+1）
+        name_l = tk.Label(self.stocks_box, text=name, fg=THEME.fg, bg=THEME.bg,
+                          font=F_STOCK_NAME, anchor="w")
+        name_l.grid(row=base_row, column=0, sticky="nswe", padx=0, pady=(4, 0))
+        code_l = tk.Label(self.stocks_box, text=self._mask(code), fg=THEME.fg3, bg=THEME.bg,
+                          font=("Microsoft YaHei UI", 8), anchor="w")
+        code_l.grid(row=base_row + 1, column=0, sticky="nswe", padx=0, pady=(0, 4))
+        # col 1: 价格（rowspan=2 跨两行，与股票名同行水平对齐）
+        price_l = tk.Label(self.stocks_box,
+                           text=self._mask(f"{price:.2f}") if price is not None else "—",
+                           fg=price_col, bg=THEME.bg, font=F_STOCK_PRC, anchor="w")
+        price_l.grid(row=base_row, column=1, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        # col 2: 涨跌幅（rowspan=2）
+        pct_text = self._mask(f"{sign(pct)}{pct:.2f}%") if pct is not None else "—"
+        pct_l = tk.Label(self.stocks_box, text=pct_text, fg=pct_col, bg=THEME.bg,
+                         font=F_STOCK_PCT, anchor="w")
+        pct_l.grid(row=base_row, column=2, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        # col 3: 换手率（rowspan=2，中性数据用 fg2）
+        tr = d.get("turnover")
+        tr_text = self._mask(f"{tr:.2f}%") if tr is not None else "—"
+        tr_l = tk.Label(self.stocks_box, text=tr_text, fg=THEME.fg2, bg=THEME.bg,
+                        font=F_STOCK_AMT, anchor="w")
+        tr_l.grid(row=base_row, column=3, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        # col 4: 成交额 Canvas（rowspan=2，文字贴 cell 左 x=3，与其他列对齐方式统一）
+        amt_text = self._mask(f"{amount:.2f}亿") if amount is not None else "—"
+        amt_l = tk.Canvas(self.stocks_box, bg=THEME.bg, width=10, height=44,
+                          highlightthickness=0, bd=0)
+        amt_l.grid(row=base_row, column=4, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        amt_text_id = amt_l.create_text(0, 0, text=amt_text,
+                                        font=F_STOCK_AMT, fill=THEME.fg2, anchor="w")
+        def _draw_amt(_evt=None, c=amt_l, tid=amt_text_id, txt=amt_text, fg=THEME.fg2):
+            h_ = c.winfo_height()
+            if c.winfo_width() < 4:
+                return
+            c.coords(tid, 3, h_ / 2)
+            c.itemconfig(tid, text=txt, fill=fg)
+        amt_l.bind("<Configure>", _draw_amt)
+        # col 5: 🗑 删除（rowspan=2，跨两行垂直居中；padx/pady 清零压掉
+        # 隐式内边距，避免 reqwidth 超过列 minsize 撑宽末列）
+        del_btn = tk.Label(self.stocks_box, text="🗑", fg=THEME.fg3, bg=THEME.bg,
+                           font=("Segoe UI Emoji", 10), cursor="hand2",
+                           padx=0, pady=0, borderwidth=0, highlightthickness=0)
+        del_btn.grid(row=base_row, column=5, rowspan=2, sticky="nse", padx=(2, 0), pady=(4, 4))
+        # 只绑按下（Button-1）：若再绑 ButtonRelease-1，一次点击会触发两次删除——
+        # 滚动状态下按下滑删掉最后一只后列表重建、滚动复位，松开时 Release 会落进
+        # 复位后同一屏幕位置的另一只股票的 🗑，造成连带删除。
+        del_btn.bind("<Button-1>", lambda e, c=code: self._remove_stock(c))
+        del_btn.bind("<Enter>", lambda e, b=del_btn: b.config(fg=THEME.up))
+        del_btn.bind("<Leave>", lambda e, b=del_btn: b.config(fg=THEME.fg3))
+
+        # stock_rows tuple: (code, frame=None, name_l, price_l, pct_l, amt_l, del_btn, code_l, amt_tid, _draw_amt, amt_text)
+        # frame=None 因为所有 widget 都在 self.stocks_box，destroy 时按 widget 自身处理
+        self.stock_rows.append((code, None, name_l, price_l, pct_l, amt_l, del_btn, code_l,
+                                amt_text_id, _draw_amt, amt_text))
 
     # ── 股票区高度自适应 / 滚动 ──
     def _stocks_header_h(self):
@@ -1830,10 +1865,7 @@ class Widget:
             try: self.sect_area.pack(fill="x", pady=(0, 4))
             except Exception: pass
 
-        # 彻底清掉旧 grid 内容
-        for child in list(self.sect_box.grid_slaves()):
-            child.destroy()
-        self._sect_rows = []
+        self._clear_sector_rows()
         # 表头显隐：有板块才显示（固定在画布上方；画布收起时 before= 失效 → 降级直接 pack）
         try:
             if codes and not self.sect_header.winfo_ismapped():
@@ -1850,62 +1882,74 @@ class Widget:
             self.sect_box.columnconfigure(i, weight=0, minsize=m)
         self.sect_box.columnconfigure(5, weight=0, minsize=18)
 
-        MISS = "---"  # 数据缺失统一占位
         for idx, code in enumerate(codes[:SECTORS_MAX]):
-            base_row = idx * 2
-            d = self.sect_data.get(code, {})
-            name = self._mask(fit_name(d.get("name") or code))
-            inflow = d.get("inflow_yi")
-            pct = d.get("change_pct")
-            tr = d.get("turnover")
-            strength = d.get("strength")
-
-            # col 0: 板块名 + 代码（双行）
-            name_l = tk.Label(self.sect_box, text=name, fg=THEME.fg, bg=THEME.bg,
-                              font=F_STOCK_NAME, anchor="w")
-            name_l.grid(row=base_row, column=0, sticky="nswe", padx=0, pady=(4, 0))
-            code_l = tk.Label(self.sect_box, text=self._mask(code), fg=THEME.fg3, bg=THEME.bg,
-                              font=("Microsoft YaHei UI", 8), anchor="w")
-            code_l.grid(row=base_row + 1, column=0, sticky="nswe", padx=0, pady=(0, 4))
-            # col 1: 资金流入(亿)，正红负绿（中国惯例），缺失 ---
-            if inflow is None:
-                inflow_text, inflow_col = MISS, THEME.fg3
-            else:
-                inflow_text = self._mask(f"{inflow:.2f}")
-                inflow_col = THEME.up if inflow > 0 else (THEME.down if inflow < 0 else THEME.fg2)
-            inflow_l = tk.Label(self.sect_box, text=inflow_text, fg=inflow_col, bg=THEME.bg,
-                                font=F_STOCK_AMT, anchor="w")
-            inflow_l.grid(row=base_row, column=1, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            # col 2: 涨幅
-            pct_col = THEME.up if (pct or 0) > 0 else (THEME.down if (pct or 0) < 0 else THEME.fg3)
-            pct_text = self._mask(f"{sign(pct)}{pct:.2f}%") if pct is not None else MISS
-            pct_l = tk.Label(self.sect_box, text=pct_text, fg=pct_col, bg=THEME.bg,
-                             font=F_STOCK_PCT, anchor="w")
-            pct_l.grid(row=base_row, column=2, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            # col 3: 换手率
-            tr_text = self._mask(f"{tr:.2f}%") if tr is not None else MISS
-            tr_l = tk.Label(self.sect_box, text=tr_text, fg=THEME.fg2, bg=THEME.bg,
-                            font=F_STOCK_AMT, anchor="w")
-            tr_l.grid(row=base_row, column=3, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            # col 4: 概念强度（今日涨幅在全部行业+概念板块中的名次，1=最强；
-            # 排名拉不到时 ---；有值时红色 第XX名）
-            if strength is None:
-                st_text, st_col = MISS, THEME.fg3
-            else:
-                st_text, st_col = self._mask(f"第{strength}名"), THEME.up
-            st_l = tk.Label(self.sect_box, text=st_text, fg=st_col, bg=THEME.bg,
-                            font=F_STOCK_AMT, anchor="w")
-            st_l.grid(row=base_row, column=4, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
-            # col 5: 🗑 删除（内边距清零防撑宽末列，与股票区同款）
-            del_btn = tk.Label(self.sect_box, text="🗑", fg=THEME.fg3, bg=THEME.bg,
-                               font=("Segoe UI Emoji", 10), cursor="hand2",
-                               padx=0, pady=0, borderwidth=0, highlightthickness=0)
-            del_btn.grid(row=base_row, column=5, rowspan=2, sticky="nse", padx=(2, 0), pady=(4, 4))
-            del_btn.bind("<Button-1>", lambda e, c=code: self._remove_sector(c))
-            del_btn.bind("<Enter>", lambda e, b=del_btn: b.config(fg=THEME.up))
-            del_btn.bind("<Leave>", lambda e, b=del_btn: b.config(fg=THEME.fg3))
+            self._build_sector_row(idx, code, self.sect_data.get(code, {}))
 
         self.root.after_idle(self._layout_sectors)
+
+    def _clear_sector_rows(self):
+        """清空 sect_box 里的旧行（与 _clear_stock_rows 同构）。"""
+        for child in list(self.sect_box.grid_slaves()):
+            child.destroy()
+        self._sect_rows = []
+
+    def _build_sector_row(self, idx, code, d):
+        """构建单个板块的双行单元格（列布局见 _render_sectors 的 docstring）。
+
+        数据缺失统一显示 "---"；资金流入/涨幅按中国惯例红涨绿跌。
+        """
+        base_row = idx * 2
+        MISS = "---"  # 数据缺失统一占位
+        name = self._mask(fit_name(d.get("name") or code))
+        inflow = d.get("inflow_yi")
+        pct = d.get("change_pct")
+        tr = d.get("turnover")
+        strength = d.get("strength")
+
+        # col 0: 板块名 + 代码（双行）
+        name_l = tk.Label(self.sect_box, text=name, fg=THEME.fg, bg=THEME.bg,
+                          font=F_STOCK_NAME, anchor="w")
+        name_l.grid(row=base_row, column=0, sticky="nswe", padx=0, pady=(4, 0))
+        code_l = tk.Label(self.sect_box, text=self._mask(code), fg=THEME.fg3, bg=THEME.bg,
+                          font=("Microsoft YaHei UI", 8), anchor="w")
+        code_l.grid(row=base_row + 1, column=0, sticky="nswe", padx=0, pady=(0, 4))
+        # col 1: 资金流入(亿)，正红负绿（中国惯例），缺失 ---
+        if inflow is None:
+            inflow_text, inflow_col = MISS, THEME.fg3
+        else:
+            inflow_text = self._mask(f"{inflow:.2f}")
+            inflow_col = THEME.up if inflow > 0 else (THEME.down if inflow < 0 else THEME.fg2)
+        inflow_l = tk.Label(self.sect_box, text=inflow_text, fg=inflow_col, bg=THEME.bg,
+                            font=F_STOCK_AMT, anchor="w")
+        inflow_l.grid(row=base_row, column=1, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        # col 2: 涨幅
+        pct_col = THEME.up if (pct or 0) > 0 else (THEME.down if (pct or 0) < 0 else THEME.fg3)
+        pct_text = self._mask(f"{sign(pct)}{pct:.2f}%") if pct is not None else MISS
+        pct_l = tk.Label(self.sect_box, text=pct_text, fg=pct_col, bg=THEME.bg,
+                         font=F_STOCK_PCT, anchor="w")
+        pct_l.grid(row=base_row, column=2, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        # col 3: 换手率
+        tr_text = self._mask(f"{tr:.2f}%") if tr is not None else MISS
+        tr_l = tk.Label(self.sect_box, text=tr_text, fg=THEME.fg2, bg=THEME.bg,
+                        font=F_STOCK_AMT, anchor="w")
+        tr_l.grid(row=base_row, column=3, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        # col 4: 概念强度（今日涨幅在全部行业+概念板块中的名次，1=最强；
+        # 排名拉不到时 ---；有值时红色 第XX名）
+        if strength is None:
+            st_text, st_col = MISS, THEME.fg3
+        else:
+            st_text, st_col = self._mask(f"第{strength}名"), THEME.up
+        st_l = tk.Label(self.sect_box, text=st_text, fg=st_col, bg=THEME.bg,
+                        font=F_STOCK_AMT, anchor="w")
+        st_l.grid(row=base_row, column=4, rowspan=2, sticky="nswe", padx=0, pady=(4, 4))
+        # col 5: 🗑 删除（内边距清零防撑宽末列，与股票区同款）
+        del_btn = tk.Label(self.sect_box, text="🗑", fg=THEME.fg3, bg=THEME.bg,
+                           font=("Segoe UI Emoji", 10), cursor="hand2",
+                           padx=0, pady=0, borderwidth=0, highlightthickness=0)
+        del_btn.grid(row=base_row, column=5, rowspan=2, sticky="nse", padx=(2, 0), pady=(4, 4))
+        del_btn.bind("<Button-1>", lambda e, c=code: self._remove_sector(c))
+        del_btn.bind("<Enter>", lambda e, b=del_btn: b.config(fg=THEME.up))
+        del_btn.bind("<Leave>", lambda e, b=del_btn: b.config(fg=THEME.fg3))
 
     def _remove_sector(self, code):
         sl = self.conf.get("sectors") or []
