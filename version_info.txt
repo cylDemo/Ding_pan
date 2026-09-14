@@ -1,0 +1,31 @@
+# PyInstaller 版本信息资源（Windows PE VersionInfo）
+# 现状问题：原 exe 的 VersionInfo 全空 + 无数字签名 → 云查杀"无主体、无信誉"直接扣分。
+# 这里补齐最小必要元数据（主体/产品/描述/版本/版权），显著改善信誉画像。
+# 需改主体名称时只改 CompanyName 一处即可，五个版本号字段保持同步。
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(2, 0, 1, 0),
+    prodvers=(2, 0, 1, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        u'080404B0',
+        [StringStruct(u'CompanyName', u'盯盘'),
+         StringStruct(u'FileDescription', u'盯盘 · A股/板块/黄金 桌面行情浮窗'),
+         StringStruct(u'FileVersion', u'2.0.0.0'),
+         StringStruct(u'InternalName', u'gold_watch_widget'),
+         StringStruct(u'LegalCopyright', u'Copyright (C) 2026 盯盘项目。行情数据来自东方财富/腾讯/京东/同花顺公开接口，仅供参考，不构成投资建议。'),
+         StringStruct(u'OriginalFilename', u'盯盘.exe'),
+         StringStruct(u'ProductName', u'盯盘'),
+         StringStruct(u'ProductVersion', u'2.0.1.0')])
+    ]),
+    VarFileInfo([VarStruct(u'Translation', [2052, 1200])])
+  ]
+)

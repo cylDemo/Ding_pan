@@ -1,0 +1,57 @@
+# ============================================================
+# 盯盘（gold widget）— 上传前排除清单
+# 生成于 2026-09-14，策略：只入库存源码/测试/构建脚本/文档，
+# 一切可由源码重建的二进制、本机环境、个人数据一律排除。
+# ============================================================
+
+# ---- 1. 打包工具链（24.3MB / 4156 文件，本机虚拟环境，绝不可入库）----
+.build_venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ---- 2. PyInstaller 构建中间产物 ----
+build/
+build_*/
+dist/
+dist_*/
+_internal/
+_spike/build*/
+_spike/dist*/
+
+# ---- 3. 交付包与可执行文件（二进制，可由源码重建；发布时走 GitHub Releases）----
+*.zip
+*.zip.bak
+*.exe
+
+# ---- 4. 运行日志 ----
+*.log
+widget.log
+
+# ---- 5. 本机特定 / 个人化文件 ----
+# mk_lnk_com.py 硬编码了本机路径（C:\Users\... 与桌面 D:\Users\Desktop），属个人环境工具
+mk_lnk_com.py
+# WorkBuddy 项目记忆（工作日志，含本机路径与过程记录）
+.workbuddy/
+
+# ---- 6. 内部报告（public 仓库不公开：含漏洞细节/本机路径/项目结构分析）----
+# 若仓库改为 private，可删掉本节以纳管这三份文档
+盯盘-安全合规审查报告.md
+盯盘-整改落地记录.md
+盯盘-架构评估报告.md
+
+# ---- 7. _spike 内的临时输出与一次性脚本（保留有复用价值的分析脚本）----
+_spike/*.txt
+_spike/*.log
+_spike/*.spec
+_spike/_git_preview.py
+_spike/_ls_for_git.py
+
+# ---- 8. 编辑器 / 系统杂项 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
