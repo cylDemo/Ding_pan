@@ -12,21 +12,28 @@
   右键    菜单（刷新 / 置顶 / 透明度 / 退出）
 """
 
-import json
 import os
 import queue
-import subprocess
 import sys
-import tempfile
 import threading
 import time
-from datetime import datetime
 
 import tkinter as tk
-from tkinter import font as tkfont
 
-import gold_data
 import glog
+import gold_config
+import gold_data
+import gold_theme
+import gold_util
+from gold_theme import (  # noqa: F401  （原模块级常量：为兼容既有引用而保留同名再导出）
+    THEMES, THEME, SIZE, SIZE_MINI, SIZE_STD_BASE,
+    HEADER_H, SEARCH_PILL_H, STOCKS_HEADER_H, STOCK_ROW_H, STOCKS_MAX,
+    STOCKS_VISIBLE, SEARCH_ROW_H, SEARCH_MAX_ROWS, STOCK_COL_WIDTHS,
+    SECTORS_MAX, SECTORS_VISIBLE, SECTORS_HEADER_H, SECT_COL_WIDTHS,
+    F_TITLE, F_SMALL, F_NAME, F_MID, F_BIG,
+    F_STOCK_NAME, F_STOCK_PRC, F_STOCK_PCT, F_STOCK_AMT, F_SEARCH,
+)
+from gold_util import area_glyph, fit_name, sign  # noqa: F401
 
 APP_DIR = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
            else os.path.dirname(os.path.abspath(__file__)))
@@ -63,11 +70,8 @@ CONF_PATH = os.path.join(os.path.expanduser("~"), ".gold_widget.json")
 MIN_INTERVAL = 3
 DEFAULT_INTERVAL = 5
 
-# 金价自动刷新时段窗口（本机本地时间）：工作日 9:30~18:00。
-# 窗口外不发任何京东请求（手动「立即刷新」不受限）；窗口开启瞬间会立即补一次。
-GOLD_WIN_DAYS = (0, 1, 2, 3, 4)      # Monday=0 … Friday=4
-GOLD_WIN_START = (9, 30)             # 含起点
-GOLD_WIN_END = (18, 0)               # 不含终点
+# 金价自动刷新时段窗口（工作日 9:30~18:00）已迁至 gold_util.GOLD_WIN_*，
+# 由该模块的 gold_window_active 消费；本模块只经 Widget._gold_window_active 间接使用。
 
 # 股票行情独立快轨：与金价彻底解耦（双轨制）。
 # 腾讯行情（qt.gtimg.cn）为单次 HTTP GET、速率宽容，实测 2s 级连续调用稳定，
@@ -75,208 +79,35 @@ GOLD_WIN_END = (18, 0)               # 不含终点
 MIN_STOCK_INTERVAL = 1
 DEFAULT_STOCK_INTERVAL = 2
 
-# 配色：白底极简 + 蓝高亮，红涨绿跌。
-# 所有颜色都通过 THEME 间接读取（dict 风格），支持运行时切换主题。
-THEMES = {
-    "light": {
-        "bg":     "#FFFFFF",   # 窗口主背景
-        "border": "#DCDFE4",   # 1px 边框
-        "fg":     "#111418",   # 主文字
-        "fg2":    "#5B6169",   # 次要文字
-        "fg3":    "#9AA0A8",   # 弱化文字（时间、副信息）
-        "line":   "#EDEEF0",   # 分隔线
-        "up":     "#E5342B",   # 涨（中国 A 股惯例：红涨）
-        "down":   "#1A9E5C",   # 跌
-        "blue":   "#3B82F6",   # 高亮
-        "hover":  "#F2F4F7",   # 悬浮/菜单
-        "pill":   "#E5E5E5",   # 搜索胶囊底色（设计稿 rgba(229,229,229,1)）
-    },
-    "dark": {
-        "bg":     "#15171B",
-        "border": "#2A2D33",
-        "fg":     "#F2F4F7",
-        "fg2":    "#A8AEB7",
-        "fg3":    "#6B7178",
-        "line":   "#26292F",
-        "up":     "#FF5A4D",
-        "down":   "#26C77A",
-        "blue":   "#3B82F6",
-        "hover":  "#1E2127",
-        "pill":   "#262A31",   # 深色模式搜索胶囊底色
-    },
-}
-
-class _Theme:
-    """当前主题持有器：直接读属性拿到最新值，切主题时遍历 widget 重 config。"""
-    def __init__(self, mode="light"):
-        self._d = dict(THEMES.get(mode, THEMES["light"]))
-    def set(self, mode):
-        self._d = dict(THEMES[mode])
-    def get(self, k):
-        return self._d[k]
-    # 属性风格访问，简化代码
-    def __getattr__(self, k):
-        if k.startswith("_"): raise AttributeError(k)
-        return self._d[k]
-
-THEME = _Theme()
-
-F_TITLE = ("Microsoft YaHei UI", 9)
-F_SMALL = ("Microsoft YaHei UI", 9)
-F_NAME  = ("Microsoft YaHei UI", 10)
-F_MID   = ("Microsoft YaHei UI", 10, "bold")
-F_BIG   = ("Microsoft YaHei UI", 22, "bold")
-# 股票行用字
-F_STOCK_NAME = ("Microsoft YaHei UI", 10, "bold")   # 股票名（带 × 删除）
-F_STOCK_PRC  = ("Microsoft YaHei UI", 13, "bold")   # 价格
-F_STOCK_PCT  = ("Microsoft YaHei UI", 11, "bold")   # 涨跌%
-F_STOCK_AMT  = ("Microsoft YaHei UI", 10)           # 成交额
-F_SEARCH     = ("Microsoft YaHei UI", 11)           # 搜索框
-
-# 高度参数（仅用于标准模式动态计算）
-HEADER_H    = 100   # 标题栏 + 金价行 + 状态栏 ≈ 100
-SEARCH_PILL_H = 26  # 搜索胶囊条高度（设计稿 20dp，放大适配 11pt 字体）
-STOCKS_HEADER_H = 18  # 股票区列标题行高度（股票名称/价格/涨幅/成交额）
-STOCK_ROW_H = 40    # 兜底估算用：每只股票双行布局高度（实测约 52px，窗口高度以实测为准）
-STOCKS_MAX  = 8     # 最多展示 8 只股票
-STOCKS_VISIBLE = 3  # 股票区固定可视行数：≤3 只按实际高度展示，>3 只锁定 3 行 + 滚轮滚动
-SEARCH_ROW_H = 28   # 搜索结果每行高度
-SEARCH_MAX_ROWS = 6
-
-# 股票区 5 个数据列的显式列宽（px）：表头（stocks_header）与数据区
-# （stocks_box）是两个独立容器，grid 均分（uniform/weight）会受各自内容
-# 最小宽度影响，两容器字体不同（表头 8pt / 数据 10pt bold）会导致列边界
-# 错位、表头与数值对不齐。两边用同一组固定像素列宽（weight=0）即可保证
-# 列边界严格一致。各列 ≥ 数据行 Label 实测 reqwidth（含默认 padx）。
-# col0=84 可完整容纳 6 字符名（如"有色ETF银华"），更长名称渲染时截断加 …。
-# 合计 326 + 删除列 18 = 344 = 容器宽（窗口 368 减内边距）。
-STOCK_COL_WIDTHS = (84, 56, 64, 58, 64)  # 名称/价格/涨幅/换手率/成交额
-
-# 板块区（上中下三段布局的"下"段）：与股票区同构的 固定表头 + 滚动画布。
-SECTORS_MAX     = 8   # 最多 8 个板块
-SECTORS_VISIBLE = 2   # 默认可视 2 个，>2 个滚轮滚动（窗口高度锁定）
-SECTORS_HEADER_H = 18
-SECT_COL_WIDTHS = (84, 68, 56, 56, 62)  # 板块名称/资金流入(亿)/涨幅/换手率/概念强度
-
-
-# 标准模式窗口高度改为实测驱动（见 Widget._std_height / _layout_stocks）：
-# 空态固定 164；有股票时 = 164 + 股票区实测可视高度（≤3 只实高，>3 只锁定 3 行）。
-
-SIZE_MINI = (248, 124)  # 迷你模式固定
-SIZE_STD_BASE = (384, 240)  # 标准模式基础（容纳 3 只股票；按 watchlist 数量动态拉伸）。
-# 384：正文可用 358px——板块/股票行的实际请求宽（352/346，真实数值如"第30名"
-# 会比预留列宽略宽撑行）+ 窗口左右各 ~13px 内边距，delete 列不再被右缘裁切。
-
-
-SIZE = {  # 迷你 / 标准（标准高度会在 _apply_size 里按 watchlist 动态覆盖）
-    True:  SIZE_MINI,
-    False: SIZE_STD_BASE,
-}
-
+# ── 分层说明 ──────────────────────────────────────────────────────────
+# 主题/排版常量 → gold_theme.py；配置读写 → gold_config.py；无状态工具 → gold_util.py。
+# 三者已在文件头 import，并把**原模块级名字同名再导出**，故既有引用无需改动
+# （含回归脚本对 gw.THEME / gw.SECT_COL_WIDTHS 的读取，以及类内对 STOCK_COL_WIDTHS
+# 等常量的使用）。本段只保留"本进程运行参数"相关的常量，与一层兼容转发。
 
 # 配置损坏时的最近一次提示（供 UI 一次性展示；不持久化）
 LAST_CONF_ERROR = None
 
 
-def _atomic_write_json(path, obj):
-    """原子写 JSON：同目录临时文件 + fsync + os.replace。
-
-    旧实现直接以 "w" 覆写配置文件：写入瞬间崩溃 / 断电 / 被杀软终止会留下
-    被截断的半截 JSON → 下次启动静默回退内置默认值，用户自选股/板块凭空消失。
-    os.replace 在同一文件系统上是原子的——要么旧内容完整，要么新内容完整。
-    """
-    d = os.path.dirname(path) or "."
-    fd, tmp = tempfile.mkstemp(prefix=".gold_widget.", suffix=".tmp", dir=d)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-
-
 def load_conf():
+    """兼容转发：路径取本模块 ``CONF_PATH``，实现委托 gold_config.load_conf。
+
+    路径间接层**必须**留在本模块——回归脚本用 ``gw.CONF_PATH = <tmp>`` 把配置重定向
+    到临时文件；若把 CONF_PATH 写死在 gold_config 内，该手法会失效并误写真实配置。
+    损坏提示仍经模块级 LAST_CONF_ERROR 传出，且仅在确实损坏时覆盖（成功时不重置），
+    与原实现一致。
+    """
     global LAST_CONF_ERROR
-    d = {"x": None, "y": None, "mini": True, "alpha": 0.97, "topmost": True,
-         "theme": "light", "watchlist": ["601069", "002738", "600487"],
-         "sectors": ["BK1136", "BK1617"],  # 光通信模块 / 黄金（东财板块代码）
-         "gold_collapsed": False}
-    raw = {}
-    if os.path.exists(CONF_PATH):
-        try:
-            with open(CONF_PATH, encoding="utf-8") as f:
-                raw = json.load(f)
-            if not isinstance(raw, dict):
-                raise ValueError("配置根节点不是 JSON 对象")
-            d.update(raw)
-        except Exception as e:
-            # 损坏绝不静默重置（否则用户只会觉得"我的股票莫名没了"）：
-            # 备份原文件保留证据 + 落日志 + 由 UI 一次性告知。
-            raw = {}
-            bak = CONF_PATH + ".corrupt"
-            if os.path.exists(bak):
-                bak = "%s.%d" % (CONF_PATH + ".corrupt", int(time.time()))
-            try:
-                os.replace(CONF_PATH, bak)
-            except Exception as e:
-                # 备份改名失败（占用/权限）：原文件留在原处，下次启动仍会解析失败 →
-                # 必须留痕，否则用户会反复"自选股莫名消失"却查不到原因。
-                bak = ""
-                glog.warn(f"损坏配置备份失败（原文件保留在原处）: {e}")
-            LAST_CONF_ERROR = ("配置文件损坏，已重置为默认"
-                               + (f"（原文件备份为 {os.path.basename(bak)}）" if bak else ""))
-            glog.error(f"配置解析失败已重置: {e}")
-    if d.get("theme") not in THEMES:
-        d["theme"] = "light"
-    d["gold_collapsed"] = bool(d.get("gold_collapsed"))
-    # watchlist 归一化：纯字符串列表、去重保序
-    wl = d.get("watchlist") or []
-    if not isinstance(wl, list):
-        wl = []
-    seen = set()
-    norm = []
-    for c in wl:
-        c = str(c).strip()
-        if c and c not in seen:
-            seen.add(c)
-            norm.append(c)
-    d["watchlist"] = norm
-    # sectors 归一化：大写、去重保序（与 watchlist 同一套规则）
-    sl = d.get("sectors") or []
-    if not isinstance(sl, list):
-        sl = []
-    seen2 = set()
-    norm_s = []
-    for c in sl:
-        c = str(c).strip().upper()
-        if c and c not in seen2:
-            seen2.add(c)
-            norm_s.append(c)
-    d["sectors"] = norm_s
-    # 首次启动 / 老用户升级时持久化默认 watchlist/sectors，避免每次都用代码默认值
-    if "watchlist" not in raw or "sectors" not in raw:
-        try:
-            _atomic_write_json(CONF_PATH, d)
-        except Exception as e:
-            glog.warn(f"首次配置写入失败: {e}")
+    d, err = gold_config.load_conf(CONF_PATH)
+    if err is not None:
+        LAST_CONF_ERROR = err
     return d
 
 
 def save_conf(c):
-    try:
-        _atomic_write_json(CONF_PATH, c)
-    except Exception as e:
-        glog.error(f"配置写入失败: {e}")
+    """兼容转发：同 load_conf，路径以本模块 CONF_PATH 为准。"""
+    gold_config.save_conf(CONF_PATH, c)
 
-
-def sign(n):
-    return "+" if (n or 0) > 0 else ""
 
 
 class Widget:
@@ -457,7 +288,15 @@ class Widget:
     def _build_body(self):
         self.body = tk.Frame(self.inner, bg=THEME.bg)
         self.body.pack(fill="both", expand=True, padx=12, pady=(4, 10))
+        # 分区构建：**调用顺序即创建/pack 顺序**。首帧几何取决于此序，
+        # 之后 _apply_size 才会按 before= 把顺序归位；调换会导致首帧布局错位。
+        self._build_gold_block()
+        self._build_search_bar()
+        self._build_stocks_area()
+        self._build_sectors_area()
 
+    def _build_gold_block(self):
+        """金价区：名称行 + 价格/涨跌行 + 分隔线 + 收起箭头。"""
         # 主价格行（金价，迷你 / 标准都显示）
         self.m_name = tk.Label(self.body, text="京东24h金价", fg=THEME.fg3, bg=THEME.bg, font=F_NAME)
         self.m_name.pack(anchor="w")
@@ -481,7 +320,6 @@ class Widget:
                               borderwidth=0, relief="flat")
         self.m_chg.pack()
 
-        # ── 搜索条：Canvas 圆角椭圆长条（常驻，单态）──
         # ── 分隔线：金价区 / 股票区的分界（纯视觉）──
         self.divider = tk.Frame(self.body, bg=THEME.line, height=1)
         self.divider.pack(fill="x", pady=(6, 4))
@@ -498,6 +336,9 @@ class Widget:
         self.gold_toggle.bind("<Enter>", lambda e: self.gold_toggle.config(fg=THEME.up))
         self.gold_toggle.bind("<Leave>", lambda e: self._update_gold_toggle())
 
+    def _build_search_bar(self):
+        """常驻搜索条：Canvas 圆角胶囊 + Entry + 放大镜 + placeholder。"""
+        # ── 搜索条：Canvas 圆角椭圆长条（常驻，单态）──
         # 圆角胶囊：tkinter 原生控件做不了圆角，用 Canvas 画。
         # Entry 的 bg 与胶囊底色一致（THEME.pill），视觉上融为一体。
         self.search_bar = tk.Canvas(self.body, height=SEARCH_PILL_H,
@@ -545,6 +386,8 @@ class Widget:
         self._search_ph_on = False  # placeholder 当前是否显示在 Entry 内
         self._show_ph()
 
+    def _build_stocks_area(self):
+        """股票 / 搜索结果二选一展示区：列标题 + 滚动画布 + 搜索下拉容器。"""
         # 股票 / 搜索结果 二选一展示区
         self.stocks_area = tk.Frame(self.body, bg=THEME.bg)
         self.stocks_area.pack(fill="x", pady=(6, 0))
@@ -586,6 +429,8 @@ class Widget:
         self.search_list.pack(fill="x")
         self._search_box_visible = False  # 当前是否在显示搜索结果
 
+    def _build_sectors_area(self):
+        """板块区（"下"段）：细线分隔 + 固定表头 + 滚动画布（与股票区同构，初始不 pack）。"""
         # ── 板块区（"下"段）：细线分隔 + 固定表头 + 滚动画布 ──
         # 与股票区完全同构：表头固定不滚动，>2 个板块滚轮滚动。
         self.sect_divider = tk.Frame(self.body, bg=THEME.line, height=1)
@@ -623,20 +468,13 @@ class Widget:
         lbl.bind("<Leave>", lambda e: on_leave_update())
         return lbl
 
-    def _area_glyph(self, collapsed):
-        """内容在按钮**下方**的区块（股票/板块区）箭头方向：
-        展开中显示 ︾（点击收起，内容向下收拢）；收起中显示 ︽（点击展开）。
-        金价区内容在按钮上方，方向相反（展开中 ︽），同一套"箭头指向内容
-        收拢方向"的逻辑。"""
-        return "︽" if collapsed else "︾"
-
     def _update_stock_toggle(self):
         self.stock_toggle.config(
-            text=self._area_glyph(self.conf.get("stocks_collapsed")), fg=THEME.fg3)
+            text=area_glyph(self.conf.get("stocks_collapsed")), fg=THEME.fg3)
 
     def _update_sect_toggle(self):
         self.sect_toggle.config(
-            text=self._area_glyph(self.conf.get("sectors_collapsed")), fg=THEME.fg3)
+            text=area_glyph(self.conf.get("sectors_collapsed")), fg=THEME.fg3)
 
     def _build_sect_header(self):
         """板块区列标题（板块名称/资金流入(亿)/涨幅/换手率/概念强度）。
@@ -1625,14 +1463,13 @@ class Widget:
             self._stock_fetching = False
 
     def _gold_window_active(self, now=None):
-        """金价自动轮询是否处于刷新时段窗口内（工作日 9:30~18:00，本地时间）。"""
-        now = now or datetime.now()
-        if now.weekday() not in GOLD_WIN_DAYS:
-            return False
-        m = now.hour * 60 + now.minute
-        s = GOLD_WIN_START[0] * 60 + GOLD_WIN_START[1]
-        e = GOLD_WIN_END[0] * 60 + GOLD_WIN_END[1]
-        return s <= m < e
+        """兼容转发：实现见 gold_util.gold_window_active。
+
+        保留为实例方法而非直接改调用点，是因为回归脚本按"未绑定函数"取用本方法
+        （``gw.Widget._gold_window_active(fake_self, now)``）；同时它也充当该纯函数
+        的唯一类内入口，便于后续替换为直接调用。
+        """
+        return gold_util.gold_window_active(now)
 
     def _poll(self):
         try:
@@ -1762,21 +1599,6 @@ class Widget:
             self._render_stocks()
             self._render_sectors()
 
-    def _fit_name(self, name):
-        """按名称列（col 0）宽度截断过长股票名，超出部分以 … 结尾。
-        列宽固定方案下列宽不可被内容撑大，否则删除按钮会被推出窗口外。"""
-        try:
-            f = tkfont.Font(font=F_STOCK_NAME)
-        except Exception:
-            return name
-        maxw = STOCK_COL_WIDTHS[0] - 8  # 扣除 Label 默认内边距余量
-        if f.measure(name) <= maxw:
-            return name
-        out = name
-        while out and f.measure(out + "…") > maxw:
-            out = out[:-1]
-        return (out + "…") if out else name
-
     def _render_stocks(self):
         """渲染关注列表的股票行。每只股票**双行布局**（参考示意图）：
           第 1 行：股票名（10pt 粗体）                🗑 删除
@@ -1826,7 +1648,7 @@ class Widget:
             base_row = idx * 2
             d = self.stock_data.get(code, {})
             # 超长名称截断加 …（列宽固定，防长名把列撑宽挤出删除按钮）
-            name = self._mask(self._fit_name(d.get("name") or code))
+            name = self._mask(fit_name(d.get("name") or code))
             price = d.get("price")
             pct = d.get("change_pct")
             amount = d.get("amount_yi")
@@ -2032,7 +1854,7 @@ class Widget:
         for idx, code in enumerate(codes[:SECTORS_MAX]):
             base_row = idx * 2
             d = self.sect_data.get(code, {})
-            name = self._mask(self._fit_name(d.get("name") or code))
+            name = self._mask(fit_name(d.get("name") or code))
             inflow = d.get("inflow_yi")
             pct = d.get("change_pct")
             tr = d.get("turnover")

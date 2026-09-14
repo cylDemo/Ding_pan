@@ -53,6 +53,9 @@ _spike/_ls_for_git.py
 _spike/_git_sync.py
 _spike/_rel_check.py
 _spike/_make_release.py
+# 一次性迁移脚本（Tier 0 重构：块搬迁 / 长方法抽取；已执行完，非幂等，留本机备查）
+_spike/_apply_t0.py
+_spike/_extract_t03.py
 
 # ---- 8. 编辑器 / 系统杂项 ----
 .vscode/
