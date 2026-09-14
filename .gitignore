@@ -49,6 +49,10 @@ _spike/*.log
 _spike/*.spec
 _spike/_git_preview.py
 _spike/_ls_for_git.py
+# 本机环境专用工具脚本（含回环代理剔除 / GCM 绝对路径等本机特有逻辑，不入库）
+_spike/_git_sync.py
+_spike/_rel_check.py
+_spike/_make_release.py
 
 # ---- 8. 编辑器 / 系统杂项 ----
 .vscode/
