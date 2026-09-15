@@ -59,7 +59,7 @@ except Exception:
     pass
 
 APP_NAME = "盯盘"
-__version__ = "2.0.3"          # 与 version_info.txt 保持同步；用于排障时确认用户手上的版本
+__version__ = "2.0.4"          # 与 version_info.txt 保持同步；用于排障时确认用户手上的版本
 CONF_PATH = os.path.join(os.path.expanduser("~"), ".gold_widget.json")
 
 # 刷新间隔：命令行 --interval 可覆盖。实测京东公开接口 5s 级连续调用零失败、
@@ -207,6 +207,7 @@ class Widget:
         # 双轨首帧：金价与股票各自拉取，互不等待
         threading.Thread(target=self._worker, daemon=True).start()
         self.fetch_stock()
+        self._hotkey_ok = False   # 由热键线程在注册成功后置 True（见 _start_global_hotkey）
         self._start_global_hotkey()
 
     # ── 全局热键（仅打包模式启用） ──
@@ -225,6 +226,9 @@ class Widget:
             if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_CONTROL | MOD_ALT, VK_D):
                 print("[warn] 全局热键 Ctrl+Alt+D 注册失败（可能被其他程序占用）", flush=True)
                 return
+            # 注册成功才置位：标题栏「—」据此决定走「隐藏」还是「最小化到任务栏」。
+            # 热键不可用时若还走隐藏，用户就再也找不回窗口了（见 _on_min_click）。
+            self._hotkey_ok = True
             msg = wintypes.MSG()
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 if msg.message == WM_HOTKEY:
@@ -233,31 +237,73 @@ class Widget:
 
         threading.Thread(target=thread, daemon=True, name="hotkey").start()
 
+    def _hide(self):
+        """隐藏浮窗（不进任务栏，也不留 Alt+Tab 条目），靠 Ctrl+Alt+D 唤回。
+
+        用 `withdraw()` 而不是 Windows 最小化：`overrideredirect(True)` 的无边框
+        浮窗本该就不在任务栏出现（默认带 WS_EX_TOOLWINDOW），硬要收进任务栏得
+        额外改窗口样式、还得应付「任务栏按钮没刷新出来」的问题，收益为零。
+        """
+        self.root.withdraw()
+
+    def _restore_visible(self):
+        """把浮窗从「隐藏」或「被 Windows 最小化」状态取回来（位置/尺寸不变）。
+
+        两种态都要覆盖，否则会出现「按了快捷键却什么都没发生」：
+          · withdrawn：窗口未映射，`deiconify()` 重新映射；但 overrideredirect
+            窗口在 Windows 上 deiconify 可能不重新映射 → 强刷窗口管理器状态后
+            lift 回来。
+          · iconic：被 Windows 最小化（仅当全局热键不可用、走了保底路径时才
+            可能发生）。此时 `deiconify()` 只会把它以最小化形态重新映射，屏幕上
+            依旧看不到 → 必须先用 Win32 `ShowWindow(SW_RESTORE)` 取回正常态。
+        """
+        if self.root.state() == "iconic":
+            try:
+                import ctypes
+                u = ctypes.windll.user32
+                hwnd = u.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+                u.ShowWindow(hwnd, 9)          # SW_RESTORE
+            except Exception:
+                glog.debug("SW_RESTORE 失败，继续走 deiconify")
+        self.root.deiconify()
+        self.root.update_idletasks()
+        self.root.attributes("-topmost", bool(self.conf["topmost"]))
+        self.root.lift()
+
+    def _on_min_click(self):
+        """标题栏「—」：隐藏浮窗，随后用 Ctrl+Alt+D 唤回。
+
+        前提是全局热键确实注册成功。若注册失败（被其他程序占用），隐藏后就再无
+        唤回手段 → 退化为「最小化到任务栏」，至少留一个能从任务栏点回来的入口。
+        """
+        if self._hotkey_ok:
+            self._hide()
+        else:
+            glog.warn("全局热键不可用，「—」退化为最小化到任务栏（保底入口）")
+            self._minimize_to_taskbar()
+
     def _toggle_visible(self):
+        """Ctrl+Alt+D：可见 ↔ 隐藏 双向切换（被最小化时也负责取回）。"""
         st = self.root.state()
         print(f"[hotkey] toggle: state={st}", flush=True)
-        if st == "withdrawn":
-            self.root.deiconify()
-            # overrideredirect(True) 窗口在 Windows 上 withdraw 后 deiconify
-            # 可能不重新映射：强制刷新窗口管理器状态后 lift 回来
-            self.root.update_idletasks()
-            self.root.attributes("-topmost", bool(self.conf["topmost"]))
-            self.root.lift()
+        if st in ("withdrawn", "iconic"):
+            self._restore_visible()
         else:
-            self.root.withdraw()
+            self._hide()
 
     def _minimize_to_taskbar(self):
-        """最小化到任务栏（浮窗是无边框窗口，需 Win32 兜底）。
+        """最小化到任务栏 —— **保底路径**，仅当全局热键不可用时才走。
 
+        正常路径是 `_hide()` + Ctrl+Alt+D 唤回（见 `_on_min_click`）。只有当
+        RegisterHotKey 失败时，隐藏就再没有唤回手段了，此时才需要任务栏入口。
         两处 Windows 特殊性决定了不能直接用 Tk 的 iconify()：
           ① `overrideredirect(True)` 窗口默认带 WS_EX_TOOLWINDOW 风格，任务栏
-             不注册按钮 → 必须去掉它并加 WS_EX_APPWINDOW，否则「最小化」后
-             任务栏没有入口、窗口无处可寻；
+             不注册按钮 → 必须去掉它并加 WS_EX_APPWINDOW；
           ② Tk 的 `wm_iconify` 会拒绝 override-redirect 窗口（实测抛
              `TclError: can't iconify ".": override-redirect flag is set`）
              → 必须绕过 Tk，直接调 Win32 `ShowWindow(SW_MINIMIZE)`。
-        实测：置样式后 SW_MINIMIZE 使 `IsIconic=1`，任务栏可点回，恢复后
-        位置/尺寸保持原样。
+        改完扩展样式必须再走一次 `SetWindowPos(SWP_FRAMECHANGED)`，否则任务栏
+        可能不重算按钮（表现为「最小化了但任务栏上找不到」）。
         异常（非 Windows / API 失败）时退回 `withdraw()` 隐藏——仍可用全局
         热键 Ctrl+Alt+D 唤回，不会出现「消失且无法恢复」。
         """
@@ -269,13 +315,16 @@ class Widget:
             WS_MINIMIZEBOX = 0x00020000
             WS_EX_APPWINDOW, WS_EX_TOOLWINDOW = 0x00040000, 0x00000080
             SW_MINIMIZE = 6
+            SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_FRAMECHANGED = 0x1, 0x2, 0x4, 0x20
             u.SetWindowLongW(hwnd, GWL_STYLE,
                              u.GetWindowLongW(hwnd, GWL_STYLE) | WS_MINIMIZEBOX)
             u.SetWindowLongW(hwnd, GWL_EXSTYLE,
                              (u.GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_TOOLWINDOW)
                              | WS_EX_APPWINDOW)
+            u.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                           SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED)
             u.ShowWindow(hwnd, SW_MINIMIZE)
-            glog.debug("已最小化到任务栏")
+            glog.debug("已最小化到任务栏（保底路径）")
         except Exception:
             glog.warn("最小化到任务栏失败，退回隐藏（Ctrl+Alt+D 可唤回）")
             self.root.withdraw()
@@ -298,15 +347,17 @@ class Widget:
         self.btn_close.bind("<Enter>", lambda e: self.btn_close.config(fg=THEME.up))
         self.btn_close.bind("<Leave>", lambda e: self.btn_close.config(fg=THEME.fg3))
 
-        # 最小化到任务栏（位于退出按钮左侧，符合 Windows「—×」惯例）。
-        # 注意：浮窗是 overrideredirect 无边框窗口，Tk 的 iconify() 对它直接抛
-        # TclError（override-redirect flag is set），且默认不在任务栏注册按钮，
-        # 故必须走 Win32 ShowWindow（见 _minimize_to_taskbar）。
+        # 标题栏「—」：隐藏浮窗（位于退出按钮左侧，符合 Windows「—×」惯例）。
+        # 收到任务栏里不是这条浮窗的预期形态——overrideredirect 无边框窗口本就
+        # 不在任务栏出现（默认带 WS_EX_TOOLWINDOW），硬收进去要额外改窗口样式，
+        # 还会踩「任务栏按钮没刷新出来 → 窗口找不回」的坑。
+        # 隐藏后用全局热键 Ctrl+Alt+D 唤回；仅当热键注册失败时才退化为最小化到
+        # 任务栏（见 _on_min_click / _minimize_to_taskbar）。
         # pack side="right" 晚于 btn_close 打包 → 落在其左侧。
         self.btn_min = tk.Label(self.title_bar, text="—", fg=THEME.fg3, bg=THEME.bg,
                                 font=("Microsoft YaHei UI", 10), cursor="hand2")
         self.btn_min.pack(side="right", padx=(6, 2))
-        self.btn_min.bind("<Button-1>", lambda e: self._minimize_to_taskbar())
+        self.btn_min.bind("<Button-1>", lambda e: self._on_min_click())
         self.btn_min.bind("<Enter>", lambda e: self.btn_min.config(fg=THEME.up))
         self.btn_min.bind("<Leave>", lambda e: self.btn_min.config(fg=THEME.fg3))
 
