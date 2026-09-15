@@ -10,9 +10,9 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 构建产物路径（与两个 spec 的 --distpath 一致）：
-#   onedir  -> dist_onedir\盯盘\…
+#   onedir  -> _out_v203\盯盘\…（每次发版换新目录，避免 PyInstaller 删旧输出被 safe-delete 拦截）
 #   onefile -> 仓库根目录 盯盘.exe（spec 用 --distpath .）
-GREEN_SRC = os.path.join(ROOT, "dist_onedir", "盯盘")
+GREEN_SRC = os.path.join(ROOT, "_out_v203", "盯盘")
 ONEFILE_SRC = os.path.join(ROOT, "盯盘.exe")
 GREEN_OUT = os.path.join(ROOT, "盯盘-绿色版.zip")
 ONEFILE_OUT = os.path.join(ROOT, "盯盘-发布包.zip")

@@ -4,7 +4,7 @@
 
 基于 Python + tkinter 编写的 Windows 桌面小工具，启动后以无边框浮窗形式停靠在屏幕右上角，实时监控黄金价格与自选股行情，一眼可见、随手可用。适合上班族在办公场景下**不切窗口**地掌握盘中关键信息。
 
-![版本](https://img.shields.io/badge/version-2.0.1-blue)
+![版本](https://img.shields.io/badge/version-2.0.3-blue)
 ![平台](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey)
 ![Python](https://img.shields.io/badge/python-3.12-3776ab)
 
@@ -26,6 +26,7 @@
 - **隐私模式 👁**：所有行情数据以 `****` 显示，适合开放工位；掩码生效时图标变蓝
 - **主题切换 ☼**：深色 / 浅色一键切换
 - **右键菜单**：立即刷新、置顶、主题、收起金价区、透明度循环、打开网页看板、退出
+- **最小化到任务栏**：标题栏 `—` 一键最小化，点任务栏图标恢复，位置与大小不变
 - **全局快捷键**：`Ctrl + Alt + D` 隐藏 / 唤出浮窗（无需切回窗口）
 - **股票搜索**：输入名称或代码即时搜索，点选结果加入自选，🗑 删除
 
@@ -45,8 +46,8 @@
 
 | 版本 | 文件 | 启动速度 | 说明 |
 |---|---|---|---|
-| **绿色版（推荐）** | [`DingPan-v2.0.1-win64-portable.zip`](https://github.com/cylDemo/Ding_pan/releases/download/v2.0.1/DingPan-v2.0.1-win64-portable.zip) | 约 1~2 秒 | 解压得到一个「盯盘」文件夹，内含 `盯盘.exe` 与 `_internal` 子目录 |
-| 单文件版 | [`DingPan-v2.0.1-win64-singlefile.zip`](https://github.com/cylDemo/Ding_pan/releases/download/v2.0.1/DingPan-v2.0.1-win64-singlefile.zip) | 约 3~5 秒 | 解压只有一个 `盯盘.exe`，每次启动需先自解压到临时目录，属正常现象 |
+| **绿色版（推荐）** | [`DingPan-v2.0.3-win64-portable.zip`](https://github.com/cylDemo/Ding_pan/releases/download/v2.0.3/DingPan-v2.0.3-win64-portable.zip) | 约 1~2 秒 | 解压得到一个「盯盘」文件夹，内含 `盯盘.exe` 与 `_internal` 子目录 |
+| 单文件版 | [`DingPan-v2.0.3-win64-singlefile.zip`](https://github.com/cylDemo/Ding_pan/releases/download/v2.0.3/DingPan-v2.0.3-win64-singlefile.zip) | 约 3~5 秒 | 解压只有一个 `盯盘.exe`，每次启动需先自解压到临时目录，属正常现象 |
 
 > 💡 压缩包文件名使用英文，是为了兼容 GitHub 的下载机制（平台会剥离非 ASCII 文件名）。**解压后包内是中文的「盯盘」文件夹，使用不受影响。**
 
@@ -74,6 +75,7 @@
 | `👁` | 隐私模式，数据掩码为 `****` |
 | `☼` | 深色 / 浅色主题切换 |
 | 右键 | 打开功能菜单 |
+| `—`（标题栏） | 最小化到任务栏，点任务栏图标恢复（位置与大小不变） |
 | `Ctrl + Alt + D` | 全局隐藏 / 唤出浮窗 |
 | 滚轮 | 自选股超过 3 只时滚动查看 |
 

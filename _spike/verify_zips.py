@@ -36,7 +36,7 @@ def main():
     fails = []
 
     # ---- 绿色版 ----
-    src_exe = os.path.join(ROOT, "dist_onedir", "盯盘", "盯盘.exe")
+    src_exe = os.path.join(ROOT, "_out_v203", "盯盘", "盯盘.exe")
     with zipfile.ZipFile(GREEN) as z:
         names = z.namelist()
         exe_members = [n for n in names if n.endswith("/盯盘.exe")]

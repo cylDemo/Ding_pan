@@ -67,6 +67,31 @@ def main(exe):
     agg = {k: 0 for k in SENSITIVE + CONTROL}
     mods_seen = []
 
+    # ── 顶层脚本/模块条目 ──
+    # 主脚本（此处为 gold_widget）与 pyimod* 引导模块**不在 PYZ 内**，
+    # 而是作为 PYSOURCE/PYMODULE 留在 CArchive 顶层。只扫 PYZ 会漏掉主脚本，
+    # 得到"干净"的假阴性（本工具确实漏过 gold_widget，见 2026-09-15 记录）。
+    top_scanned = []
+    for name in top:
+        if name.lower().endswith((".pyz", ".pyz.pyz")):
+            continue
+        try:
+            blob = arch.extract(name)
+        except Exception:
+            continue
+        if not blob:
+            continue
+        try:
+            obj = marshal.loads(bytes(blob))
+        except Exception:
+            continue
+        if not isinstance(obj, types.CodeType):
+            continue
+        top_scanned.append(name)
+        for k, v in count_hits(strings_of(obj), SENSITIVE + CONTROL).items():
+            agg[k] += v
+    print("顶层可解析为 code object 的条目: %s" % (", ".join(top_scanned) or "(无)"))
+
     for pz in pyz:
         blob = arch.extract(pz)
         if not blob:

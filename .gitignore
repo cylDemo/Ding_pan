@@ -18,6 +18,8 @@ build/
 build_*/
 dist/
 dist_*/
+# 发版用的全新 distpath（如 _out_v203 / _out_min）——每次发版换目录以避开 PyInstaller 删旧输出
+_out_*/
 _internal/
 _spike/build*/
 _spike/dist*/
@@ -56,6 +58,9 @@ _spike/_make_release.py
 # 一次性迁移脚本（Tier 0 重构：块搬迁 / 长方法抽取；已执行完，非幂等，留本机备查）
 _spike/_apply_t0.py
 _spike/_extract_t03.py
+# 一次性探针（9/15 验证 overrideredirect 窗口最小化行为；结论已落入 gold_widget 与项目记忆）
+_spike/_probe_iconify.py
+_spike/_probe_iconify2.py
 
 # ---- 8. 编辑器 / 系统杂项 ----
 .vscode/

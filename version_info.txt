@@ -4,8 +4,8 @@
 # 需改主体名称时只改 CompanyName 一处即可，五个版本号字段保持同步。
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(2, 0, 2, 0),
-    prodvers=(2, 0, 2, 0),
+    filevers=(2, 0, 3, 0),
+    prodvers=(2, 0, 3, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -19,12 +19,12 @@ VSVersionInfo(
         u'080404B0',
         [StringStruct(u'CompanyName', u'盯盘'),
          StringStruct(u'FileDescription', u'盯盘 · A股/板块/黄金 桌面行情浮窗'),
-         StringStruct(u'FileVersion', u'2.0.2.0'),
+         StringStruct(u'FileVersion', u'2.0.3.0'),
          StringStruct(u'InternalName', u'gold_watch_widget'),
          StringStruct(u'LegalCopyright', u'Copyright (C) 2026 盯盘项目。行情数据来自东方财富/腾讯/京东/同花顺公开接口，仅供参考，不构成投资建议。'),
          StringStruct(u'OriginalFilename', u'盯盘.exe'),
          StringStruct(u'ProductName', u'盯盘'),
-         StringStruct(u'ProductVersion', u'2.0.2.0')])
+         StringStruct(u'ProductVersion', u'2.0.3.0')])
     ]),
     VarFileInfo([VarStruct(u'Translation', [2052, 1200])])
   ]
