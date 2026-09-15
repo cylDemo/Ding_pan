@@ -61,8 +61,8 @@ _spike/_extract_t03.py
 # 一次性探针（9/15 验证 overrideredirect 窗口最小化行为；结论已落入 gold_widget 与项目记忆）
 _spike/_probe_iconify.py
 _spike/_probe_iconify2.py
-# 一次性发版驱动（v2.0.3 分层提交；通用能力已由 _git_sync.py 覆盖）
-_spike/_commit_v203.py
+# 一次性发版驱动（分层提交；通用能力已由 _git_sync.py 覆盖）
+_spike/_commit_v20*.py
 
 # ---- 8. 编辑器 / 系统杂项 ----
 .vscode/

@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-r"""验证「最小化到任务栏」改动确实进入了打包产物。
+r"""验证某次改动的标识确实进入了打包产物（当前用于标题栏「—」隐藏/恢复改动）。
+
+改 POSITIVE 列表即可复用于其它改动 —— 这是"改动是否真进包"的唯一可靠判据
+（时间戳只能说明"构建过"，不能说明"这个改动在里面"）。
 
 做法：解 CArchive -> 导出 PYZ 到临时文件 -> 遍历 code object 的
-co_names/co_consts 收集字面量后再匹配（PYZ 是 zlib 压缩的，
+co_names/co_consts/co_varnames 收集字面量后再匹配（PYZ 是 zlib 压缩的，
 直接在 exe 上搜明文字符串会假阴性）。
 
 带阳性 / 阴性对照，避免"扫不到"被误读为"没包含"。
@@ -19,10 +22,10 @@ import types
 from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader
 
 # 本轮改动引入的标识（必须命中）
-# 说明：_minimize_to_taskbar / btn_min / ShowWindow 是属性名（落 co_names），
-#       WS_EX_APPWINDOW / SW_MINIMIZE 是局部变量名（落 co_varnames）。
-POSITIVE = ["_minimize_to_taskbar", "btn_min", "ShowWindow",
-            "WS_EX_APPWINDOW", "SW_MINIMIZE"]
+# 说明：方法名/属性名落 co_names，局部变量名落 co_varnames（两者都采集）。
+#       注释里的字面量不会进字节码，所以只列真实出现在代码里的标识。
+POSITIVE = ["_on_min_click", "_restore_visible", "_hide", "_hotkey_ok",
+            "_minimize_to_taskbar", "btn_min", "ShowWindow", "SWP_FRAMECHANGED"]
 # 阴性对照（必须 0 命中，否则说明扫描器会误报）
 NEGATIVE = ["_definitely_not_a_real_method_xyz", "clawx_def"]
 
@@ -133,7 +136,7 @@ def main(exe):
     ok = has_pos and clean_neg
     print()
     if ok:
-        print("结论: PASS —— 最小化改动已进入该产物")
+        print("结论: PASS —— 本轮改动已进入该产物")
     elif clean_neg:
         print("结论: FAIL —— 产物未包含该改动")
     else:
