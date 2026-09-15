@@ -59,7 +59,7 @@ except Exception:
     pass
 
 APP_NAME = "盯盘"
-__version__ = "2.0.2"          # 与 version_info.txt 保持同步；用于排障时确认用户手上的版本
+__version__ = "2.0.3"          # 与 version_info.txt 保持同步；用于排障时确认用户手上的版本
 CONF_PATH = os.path.join(os.path.expanduser("~"), ".gold_widget.json")
 
 # 刷新间隔：命令行 --interval 可覆盖。实测京东公开接口 5s 级连续调用零失败、
@@ -246,6 +246,40 @@ class Widget:
         else:
             self.root.withdraw()
 
+    def _minimize_to_taskbar(self):
+        """最小化到任务栏（浮窗是无边框窗口，需 Win32 兜底）。
+
+        两处 Windows 特殊性决定了不能直接用 Tk 的 iconify()：
+          ① `overrideredirect(True)` 窗口默认带 WS_EX_TOOLWINDOW 风格，任务栏
+             不注册按钮 → 必须去掉它并加 WS_EX_APPWINDOW，否则「最小化」后
+             任务栏没有入口、窗口无处可寻；
+          ② Tk 的 `wm_iconify` 会拒绝 override-redirect 窗口（实测抛
+             `TclError: can't iconify ".": override-redirect flag is set`）
+             → 必须绕过 Tk，直接调 Win32 `ShowWindow(SW_MINIMIZE)`。
+        实测：置样式后 SW_MINIMIZE 使 `IsIconic=1`，任务栏可点回，恢复后
+        位置/尺寸保持原样。
+        异常（非 Windows / API 失败）时退回 `withdraw()` 隐藏——仍可用全局
+        热键 Ctrl+Alt+D 唤回，不会出现「消失且无法恢复」。
+        """
+        try:
+            import ctypes
+            u = ctypes.windll.user32
+            hwnd = u.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+            GWL_STYLE, GWL_EXSTYLE = -16, -20
+            WS_MINIMIZEBOX = 0x00020000
+            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW = 0x00040000, 0x00000080
+            SW_MINIMIZE = 6
+            u.SetWindowLongW(hwnd, GWL_STYLE,
+                             u.GetWindowLongW(hwnd, GWL_STYLE) | WS_MINIMIZEBOX)
+            u.SetWindowLongW(hwnd, GWL_EXSTYLE,
+                             (u.GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_TOOLWINDOW)
+                             | WS_EX_APPWINDOW)
+            u.ShowWindow(hwnd, SW_MINIMIZE)
+            glog.debug("已最小化到任务栏")
+        except Exception:
+            glog.warn("最小化到任务栏失败，退回隐藏（Ctrl+Alt+D 可唤回）")
+            self.root.withdraw()
+
     # ── 界面 ──
     def _build_title(self):
         self.title_bar = tk.Frame(self.inner, bg=THEME.bg, height=28)
@@ -263,6 +297,18 @@ class Widget:
         self.btn_close.bind("<Button-1>", lambda e: self.quit())
         self.btn_close.bind("<Enter>", lambda e: self.btn_close.config(fg=THEME.up))
         self.btn_close.bind("<Leave>", lambda e: self.btn_close.config(fg=THEME.fg3))
+
+        # 最小化到任务栏（位于退出按钮左侧，符合 Windows「—×」惯例）。
+        # 注意：浮窗是 overrideredirect 无边框窗口，Tk 的 iconify() 对它直接抛
+        # TclError（override-redirect flag is set），且默认不在任务栏注册按钮，
+        # 故必须走 Win32 ShowWindow（见 _minimize_to_taskbar）。
+        # pack side="right" 晚于 btn_close 打包 → 落在其左侧。
+        self.btn_min = tk.Label(self.title_bar, text="—", fg=THEME.fg3, bg=THEME.bg,
+                                font=("Microsoft YaHei UI", 10), cursor="hand2")
+        self.btn_min.pack(side="right", padx=(6, 2))
+        self.btn_min.bind("<Button-1>", lambda e: self._minimize_to_taskbar())
+        self.btn_min.bind("<Enter>", lambda e: self.btn_min.config(fg=THEME.up))
+        self.btn_min.bind("<Leave>", lambda e: self.btn_min.config(fg=THEME.fg3))
 
         self.t_time = tk.Label(self.title_bar, text="--:--", fg=THEME.fg3, bg=THEME.bg, font=F_SMALL)
         self.t_time.pack(side="right", padx=(0, 6))
@@ -927,6 +973,7 @@ class Widget:
             (self.t_label, "fg2"),
             (self.t_time, "fg3"),
             (self.btn_close, "fg3"),
+            (self.btn_min, "fg3"),
             (self.btn_theme, "fg3"),
         ):
             try: w.config(bg=THEME.bg, fg=THEME.get(role))

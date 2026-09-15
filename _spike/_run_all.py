@@ -14,12 +14,22 @@ import subprocess
 import sys
 import time
 
+# 子进程输出可能含 UTF-8 替换字符（\ufffd），而 Windows 控制台 stdout 默认
+# 是 cp936(GBK)，直接 print 会抛 UnicodeEncodeError、把整个批跑器打断。
+# 统一把本进程 stdout/stderr 改为 UTF-8（errors=replace 保证不再中断）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
 
 TESTS = ["_t_log.py", "_t_pyz.py", "_t_focus.py", "_t_menu.py", "_t_alpha.py",
          "_t_collapse.py", "_t_quota.py", "_t_routing.py", "_t_sectors.py",
-         "_t_sectors_keepold.py", "_t_strength.py", "_t_turnover.py"]
+         "_t_sectors_keepold.py", "_t_strength.py", "_t_turnover.py",
+         "_t_minimize.py"]
 
 
 def run_one(name, timeout=180):
